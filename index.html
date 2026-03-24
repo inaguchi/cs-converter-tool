@@ -81,6 +81,7 @@
 			background: #f1f5f9;
 			border-radius: 14px;
 			font-size: 14px;
+			line-height: 1.8;
 		}
 
 		.section {
@@ -207,6 +208,11 @@
 			border-radius: 8px;
 		}
 
+		.small {
+			font-size: 12px;
+			color: #64748b;
+		}
+
 		@media (max-width: 900px) {
 			.grid {
 				grid-template-columns: 1fr;
@@ -221,17 +227,17 @@
 <body>
 	<div class="container">
 		<h1>CSファイル変換ツール</h1>
-		<p class="preamble">.cs を .cs.txt / .cs.md / .zip に変換して、そのままダウンロードできます。処理はブラウザ内だけで完結します。</p>
+		<p class="preamble">.cs を .cs.txt / .cs.md / .zip に変換できます。複数ファイル選択時はまとめて zip でダウンロードします。</p>
 
 		<div class="grid">
 			<div class="card">
 				<h2>ファイル投入</h2>
-				<p class="desc">.cs / .txt / .md を読み込めます</p>
+				<p class="desc">.cs / .txt / .md を複数読み込めます</p>
 
 				<div id="dropzone" class="dropzone">
 					<div>ここにファイルをドロップ</div>
-					<div style="margin-top: 8px; color: #64748b; font-size: 14px;">またはクリックして選択</div>
-					<input id="fileInput" type="file" accept=".cs,.txt,.md" style="display: none;" />
+					<div style="margin-top: 8px; color: #64748b; font-size: 14px;">またはクリックして複数選択</div>
+					<input id="fileInput" type="file" accept=".cs,.txt,.md" multiple style="display: none;" />
 				</div>
 
 				<div id="fileInfo" class="file-info" style="display: none;"></div>
@@ -242,6 +248,9 @@
 						<label class="option"><input type="radio" name="outputType" value="txt" checked /> .cs.txt / .txt</label>
 						<label class="option"><input type="radio" name="outputType" value="md" /> .cs.md / .md</label>
 						<label class="option"><input type="radio" name="outputType" value="zip" /> .zip</label>
+					</div>
+					<div class="small" style="margin-top: 8px;">
+						複数ファイル選択時は、どの形式を選んでも zip にまとめてダウンロードされます
 					</div>
 				</div>
 
@@ -304,8 +313,8 @@
 		const successBox = document.getElementById("successBox");
 		const addBom = document.getElementById("addBom");
 
-		let currentFile = null;
-		let currentText = "";
+		let currentFiles = [];
+		let currentFileContents = [];
 
 		function formatBytes(bytes) {
 			if (bytes < 1024) return bytes + " B";
@@ -345,48 +354,107 @@
 			return text;
 		}
 
-		function getOutputFileName() {
-			if (!currentFile) return "converted.cs.txt";
-
-			const originalName = currentFile.name;
+		function getSingleOutputFileName(file) {
 			const outputType = getSelectedOutputType();
 
 			if (outputType === "zip") {
-				return originalName + ".zip";
+				return file.name + ".zip";
 			}
 
-			return originalName + "." + outputType;
+			return file.name + "." + outputType;
 		}
 
-		function getZipInnerFileName() {
-			if (!currentFile) return "converted.cs.txt";
-			return currentFile.name + ".txt";
+		function getInnerConvertedFileName(file) {
+			const outputType = getSelectedOutputType();
+			return file.name + "." + outputType;
+		}
+
+		function getMultiZipFileName() {
+			const outputType = getSelectedOutputType();
+			return "converted_files_" + outputType + ".zip";
 		}
 
 		function updatePreview() {
-			if (!currentText) {
+			if (currentFiles.length === 0 || currentFileContents.length === 0) {
 				preview.textContent = "ここに変換後のプレビューが表示されます";
 				previewFileName.textContent = "converted.cs.txt";
 				return;
 			}
 
 			const lineEnding = getSelectedLineEnding();
-			const converted = normalizeLineEndings(currentText, lineEnding);
-			preview.textContent = converted.slice(0, 3000);
-			previewFileName.textContent = getOutputFileName();
+
+			if (currentFiles.length === 1) {
+				const converted = normalizeLineEndings(currentFileContents[0], lineEnding);
+				preview.textContent = converted.slice(0, 3000);
+				previewFileName.textContent = getSingleOutputFileName(currentFiles[0]);
+				return;
+			}
+
+			const firstFile = currentFiles[0];
+			const converted = normalizeLineEndings(currentFileContents[0], lineEnding);
+			previewFileName.textContent = getMultiZipFileName();
+			preview.textContent =
+				"複数ファイルモードです\n" +
+				"ダウンロード形式: " + getMultiZipFileName() + "\n" +
+				"先頭ファイルの出力名: " + getInnerConvertedFileName(firstFile) + "\n\n" +
+				converted.slice(0, 2500);
 		}
 
-		async function loadFile(file) {
+		function renderFileInfo() {
+			if (currentFiles.length === 0) {
+				fileInfo.style.display = "none";
+				return;
+			}
+
+			let totalSize = 0;
+			let html = "";
+
+			currentFiles.forEach(function (file, index) {
+				totalSize += file.size;
+				html += "<strong>" + (index + 1) + ".</strong> " + escapeHtml(file.name) + " (" + formatBytes(file.size) + ")<br>";
+			});
+
+			html += "<br><strong>件数:</strong> " + currentFiles.length + " 件";
+			html += "<br><strong>合計サイズ:</strong> " + formatBytes(totalSize);
+
+			fileInfo.innerHTML = html;
+			fileInfo.style.display = "block";
+		}
+
+		function escapeHtml(text) {
+			const div = document.createElement("div");
+			div.innerText = text;
+			return div.innerHTML;
+		}
+
+		async function loadFiles(files) {
 			clearMessages();
+
 			try {
-				const text = await file.text();
-				currentFile = file;
-				currentText = text;
-				fileInfo.style.display = "block";
-				fileInfo.innerHTML = "<strong>ファイル名:</strong> " + file.name + "<br><strong>サイズ:</strong> " + formatBytes(file.size);
+				const fileArray = Array.from(files);
+				if (fileArray.length === 0) {
+					showError("ファイルが選択されていません。");
+					return;
+				}
+
+				const contents = [];
+				for (const file of fileArray) {
+					const text = await file.text();
+					contents.push(text);
+				}
+
+				currentFiles = fileArray;
+				currentFileContents = contents;
+
+				renderFileInfo();
 				convertBtn.disabled = false;
 				updatePreview();
-				showSuccess(file.name + " を読み込みました");
+
+				if (fileArray.length === 1) {
+					showSuccess(fileArray[0].name + " を読み込みました");
+				} else {
+					showSuccess(fileArray.length + " 件のファイルを読み込みました");
+				}
 			} catch (e) {
 				showError("ファイルの読み込みに失敗しました。文字コードやファイル破損の可能性があります。");
 			}
@@ -404,7 +472,7 @@
 		}
 
 		async function convertAndDownload() {
-			if (!currentFile) {
+			if (currentFiles.length === 0) {
 				showError("先にファイルを選択してください。");
 				return;
 			}
@@ -414,37 +482,62 @@
 			try {
 				const outputType = getSelectedOutputType();
 				const lineEnding = getSelectedLineEnding();
-				let converted = normalizeLineEndings(currentText, lineEnding);
 
-				if (addBom.checked) {
-					converted = "\uFEFF" + converted;
-				}
+				if (currentFiles.length === 1) {
+					let converted = normalizeLineEndings(currentFileContents[0], lineEnding);
 
-				if (outputType === "txt" || outputType === "md") {
-					const blob = new Blob([converted], { type: "text/plain;charset=utf-8" });
-					const outputFileName = getOutputFileName();
-					downloadBlob(blob, outputFileName);
-					showSuccess(outputFileName + " をダウンロードしました");
+					if (addBom.checked) {
+						converted = "\uFEFF" + converted;
+					}
+
+					const file = currentFiles[0];
+
+					if (outputType === "txt" || outputType === "md") {
+						const blob = new Blob([converted], { type: "text/plain;charset=utf-8" });
+						const outputFileName = getSingleOutputFileName(file);
+						downloadBlob(blob, outputFileName);
+						showSuccess(outputFileName + " をダウンロードしました");
+						return;
+					}
+
+					const zip = new JSZip();
+					const zipInnerFileName = file.name + ".txt";
+					const zipFileName = file.name + ".zip";
+					zip.file(zipInnerFileName, converted);
+					const blob = await zip.generateAsync({ type: "blob" });
+					downloadBlob(blob, zipFileName);
+					showSuccess(zipFileName + " をダウンロードしました（中身: " + zipInnerFileName + "）");
 					return;
 				}
 
 				const zip = new JSZip();
-				const zipInnerFileName = getZipInnerFileName();
-				const zipFileName = getOutputFileName();
-				zip.file(zipInnerFileName, converted);
+
+				for (let i = 0; i < currentFiles.length; i++) {
+					let converted = normalizeLineEndings(currentFileContents[i], lineEnding);
+
+					if (addBom.checked) {
+						converted = "\uFEFF" + converted;
+					}
+
+					const innerFileName = getInnerConvertedFileName(currentFiles[i]);
+					zip.file(innerFileName, converted);
+				}
+
+				const zipFileName = getMultiZipFileName();
 				const blob = await zip.generateAsync({ type: "blob" });
 				downloadBlob(blob, zipFileName);
-				showSuccess(zipFileName + " をダウンロードしました（中身: " + zipInnerFileName + "）");
+				showSuccess(zipFileName + " をダウンロードしました（" + currentFiles.length + " 件）");
 			} catch (e) {
 				showError("変換またはダウンロードに失敗しました。");
 			}
 		}
 
 		function resetAll() {
-			currentFile = null;
-			currentText = "";
+			currentFiles = [];
+			currentFileContents = [];
 			fileInput.value = "";
 			fileInfo.style.display = "none";
+			fileInfo.innerHTML = "";
 			convertBtn.disabled = true;
 			addBom.checked = false;
 			clearMessages();
@@ -456,8 +549,10 @@
 		});
 
 		fileInput.addEventListener("change", function (event) {
-			const file = event.target.files[0];
-			if (file) loadFile(file);
+			const files = event.target.files;
+			if (files && files.length > 0) {
+				loadFiles(files);
+			}
 		});
 
 		dropzone.addEventListener("dragover", function (event) {
@@ -472,8 +567,10 @@
 		dropzone.addEventListener("drop", function (event) {
 			event.preventDefault();
 			dropzone.classList.remove("dragover");
-			const file = event.dataTransfer.files[0];
-			if (file) loadFile(file);
+			const files = event.dataTransfer.files;
+			if (files && files.length > 0) {
+				loadFiles(files);
+			}
 		});
 
 		convertBtn.addEventListener("click", convertAndDownload);
