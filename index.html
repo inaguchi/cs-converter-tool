@@ -221,7 +221,7 @@
 <body>
 	<div class="container">
 		<h1>CSファイル変換ツール</h1>
-		<p class="preamble">.cs を .txt / .md / .zip に変換して、そのままダウンロードできます。処理はブラウザ内だけで完結します。</p>
+		<p class="preamble">.cs を .cs.txt / .cs.md / .zip に変換して、そのままダウンロードできます。処理はブラウザ内だけで完結します。</p>
 
 		<div class="grid">
 			<div class="card">
@@ -239,8 +239,8 @@
 				<div class="section">
 					<label class="label">出力形式</label>
 					<div class="options">
-						<label class="option"><input type="radio" name="outputType" value="txt" checked /> .txt</label>
-						<label class="option"><input type="radio" name="outputType" value="md" /> .md</label>
+						<label class="option"><input type="radio" name="outputType" value="txt" checked /> .cs.txt / .txt</label>
+						<label class="option"><input type="radio" name="outputType" value="md" /> .cs.md / .md</label>
 						<label class="option"><input type="radio" name="outputType" value="zip" /> .zip</label>
 					</div>
 				</div>
@@ -272,7 +272,7 @@
 
 			<div class="card">
 				<h2>プレビュー</h2>
-				<p id="previewFileName" class="desc">converted.txt</p>
+				<p id="previewFileName" class="desc">converted.cs.txt</p>
 				<div id="preview" class="preview">ここに変換後のプレビューが表示されます</div>
 			</div>
 		</div>
@@ -306,12 +306,6 @@
 
 		let currentFile = null;
 		let currentText = "";
-
-		function getBaseName(filename) {
-			const lastDot = filename.lastIndexOf(".");
-			if (lastDot <= 0) return filename;
-			return filename.slice(0, lastDot);
-		}
 
 		function formatBytes(bytes) {
 			if (bytes < 1024) return bytes + " B";
@@ -352,14 +346,27 @@
 		}
 
 		function getOutputFileName() {
-			if (!currentFile) return "converted.txt";
-			return getBaseName(currentFile.name) + "." + getSelectedOutputType();
+			if (!currentFile) return "converted.cs.txt";
+
+			const originalName = currentFile.name;
+			const outputType = getSelectedOutputType();
+
+			if (outputType === "zip") {
+				return originalName + ".zip";
+			}
+
+			return originalName + "." + outputType;
+		}
+
+		function getZipInnerFileName() {
+			if (!currentFile) return "converted.cs.txt";
+			return currentFile.name + ".txt";
 		}
 
 		function updatePreview() {
 			if (!currentText) {
 				preview.textContent = "ここに変換後のプレビューが表示されます";
-				previewFileName.textContent = "converted.txt";
+				previewFileName.textContent = "converted.cs.txt";
 				return;
 			}
 
@@ -413,20 +420,21 @@
 					converted = "\uFEFF" + converted;
 				}
 
-				const base = getBaseName(currentFile.name);
-
 				if (outputType === "txt" || outputType === "md") {
 					const blob = new Blob([converted], { type: "text/plain;charset=utf-8" });
-					downloadBlob(blob, base + "." + outputType);
-					showSuccess(base + "." + outputType + " をダウンロードしました");
+					const outputFileName = getOutputFileName();
+					downloadBlob(blob, outputFileName);
+					showSuccess(outputFileName + " をダウンロードしました");
 					return;
 				}
 
 				const zip = new JSZip();
-				zip.file(base + ".txt", converted);
+				const zipInnerFileName = getZipInnerFileName();
+				const zipFileName = getOutputFileName();
+				zip.file(zipInnerFileName, converted);
 				const blob = await zip.generateAsync({ type: "blob" });
-				downloadBlob(blob, base + ".zip");
-				showSuccess(base + ".zip をダウンロードしました");
+				downloadBlob(blob, zipFileName);
+				showSuccess(zipFileName + " をダウンロードしました（中身: " + zipInnerFileName + "）");
 			} catch (e) {
 				showError("変換またはダウンロードに失敗しました。");
 			}
