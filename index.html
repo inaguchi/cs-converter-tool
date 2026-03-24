@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>CSファイル変換ツール</title>
+	<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+	<style>
+		* {
+			box-sizing: border-box;
+		}
+
+		body {
+			margin: 0;
+			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+			background: #f8fafc;
+			color: #0f172a;
+		}
+
+		.container {
+			max-width: 1100px;
+			margin: 0 auto;
+			padding: 24px;
+		}
+
+		h1 {
+			margin: 0 0 8px;
+			font-size: 32px;
+		}
+
+		.preamble {
+			margin: 0 0 24px;
+			color: #475569;
+		}
+
+		.grid {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			gap: 24px;
+		}
+
+		.card {
+			background: #ffffff;
+			border: 1px solid #e2e8f0;
+			border-radius: 20px;
+			padding: 20px;
+			box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+		}
+
+		.card h2 {
+			margin-top: 0;
+			margin-bottom: 8px;
+			font-size: 20px;
+		}
+
+		.card p.desc {
+			margin-top: 0;
+			margin-bottom: 18px;
+			color: #64748b;
+			font-size: 14px;
+		}
+
+		.dropzone {
+			border: 2px dashed #cbd5e1;
+			border-radius: 18px;
+			background: #f8fafc;
+			padding: 32px 16px;
+			text-align: center;
+			cursor: pointer;
+			transition: 0.2s ease;
+		}
+
+		.dropzone.dragover {
+			border-color: #2563eb;
+			background: #eff6ff;
+		}
+
+		.file-info {
+			margin-top: 16px;
+			padding: 14px;
+			background: #f1f5f9;
+			border-radius: 14px;
+			font-size: 14px;
+		}
+
+		.section {
+			margin-top: 18px;
+		}
+
+		.label {
+			display: block;
+			font-weight: 600;
+			margin-bottom: 10px;
+		}
+
+		.options {
+			display: grid;
+			grid-template-columns: repeat(3, 1fr);
+			gap: 10px;
+		}
+
+		.option {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			padding: 12px;
+			border: 1px solid #cbd5e1;
+			border-radius: 14px;
+			background: #fff;
+		}
+
+		.checkbox-row {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			padding: 12px;
+			border: 1px solid #cbd5e1;
+			border-radius: 14px;
+			background: #fff;
+		}
+
+		.actions {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 12px;
+			margin-top: 18px;
+		}
+
+		button {
+			border: none;
+			border-radius: 14px;
+			padding: 12px 18px;
+			font-size: 14px;
+			font-weight: 600;
+			cursor: pointer;
+		}
+
+		button.primary {
+			background: #2563eb;
+			color: #fff;
+		}
+
+		button.secondary {
+			background: #e2e8f0;
+			color: #0f172a;
+		}
+
+		button:disabled {
+			opacity: 0.6;
+			cursor: not-allowed;
+		}
+
+		.alert {
+			margin-top: 16px;
+			padding: 14px;
+			border-radius: 14px;
+			font-size: 14px;
+		}
+
+		.alert.error {
+			background: #fef2f2;
+			border: 1px solid #fecaca;
+			color: #991b1b;
+		}
+
+		.alert.success {
+			background: #ecfdf5;
+			border: 1px solid #a7f3d0;
+			color: #065f46;
+		}
+
+		.preview {
+			background: #020617;
+			color: #e2e8f0;
+			border-radius: 18px;
+			padding: 16px;
+			min-height: 540px;
+			max-height: 640px;
+			overflow: auto;
+			white-space: pre-wrap;
+			word-break: break-word;
+			font-family: Consolas, Monaco, monospace;
+			font-size: 13px;
+			line-height: 1.65;
+		}
+
+		.help {
+			margin-top: 24px;
+			background: #ffffff;
+			border: 1px solid #e2e8f0;
+			border-radius: 20px;
+			padding: 20px;
+		}
+
+		.help h2 {
+			margin-top: 0;
+		}
+
+		.help ol {
+			padding-left: 20px;
+			line-height: 1.9;
+		}
+
+		code {
+			background: #e2e8f0;
+			padding: 2px 6px;
+			border-radius: 8px;
+		}
+
+		@media (max-width: 900px) {
+			.grid {
+				grid-template-columns: 1fr;
+			}
+
+			.options {
+				grid-template-columns: 1fr;
+			}
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<h1>CSファイル変換ツール</h1>
+		<p class="preamble">.cs を .txt / .md / .zip に変換して、そのままダウンロードできます。処理はブラウザ内だけで完結します。</p>
+
+		<div class="grid">
+			<div class="card">
+				<h2>ファイル投入</h2>
+				<p class="desc">.cs / .txt / .md を読み込めます</p>
+
+				<div id="dropzone" class="dropzone">
+					<div>ここにファイルをドロップ</div>
+					<div style="margin-top: 8px; color: #64748b; font-size: 14px;">またはクリックして選択</div>
+					<input id="fileInput" type="file" accept=".cs,.txt,.md" style="display: none;" />
+				</div>
+
+				<div id="fileInfo" class="file-info" style="display: none;"></div>
+
+				<div class="section">
+					<label class="label">出力形式</label>
+					<div class="options">
+						<label class="option"><input type="radio" name="outputType" value="txt" checked /> .txt</label>
+						<label class="option"><input type="radio" name="outputType" value="md" /> .md</label>
+						<label class="option"><input type="radio" name="outputType" value="zip" /> .zip</label>
+					</div>
+				</div>
+
+				<div class="section">
+					<label class="label">改行コード</label>
+					<div class="options">
+						<label class="option"><input type="radio" name="lineEnding" value="keep" checked /> 元のまま</label>
+						<label class="option"><input type="radio" name="lineEnding" value="lf" /> LF</label>
+						<label class="option"><input type="radio" name="lineEnding" value="crlf" /> CRLF</label>
+					</div>
+				</div>
+
+				<div class="section">
+					<label class="checkbox-row">
+						<input id="addBom" type="checkbox" />
+						<span>UTF-8 BOM を付与する</span>
+					</label>
+				</div>
+
+				<div class="actions">
+					<button id="convertBtn" class="primary" disabled>変換してダウンロード</button>
+					<button id="resetBtn" class="secondary">リセット</button>
+				</div>
+
+				<div id="errorBox" class="alert error" style="display: none;"></div>
+				<div id="successBox" class="alert success" style="display: none;"></div>
+			</div>
+
+			<div class="card">
+				<h2>プレビュー</h2>
+				<p id="previewFileName" class="desc">converted.txt</p>
+				<div id="preview" class="preview">ここに変換後のプレビューが表示されます</div>
+			</div>
+		</div>
+
+		<div class="help">
+			<h2>GitHub Pages 公開手順</h2>
+			<ol>
+				<li>GitHub で新規リポジトリを作成します。例: <code>cs-converter-tool</code></li>
+				<li>このHTMLを <code>index.html</code> という名前で保存します</li>
+				<li>リポジトリのルートに <code>index.html</code> をアップロードしてコミットします</li>
+				<li>GitHub の <code>Settings</code> → <code>Pages</code> を開きます</li>
+				<li><code>Build and deployment</code> の <code>Source</code> で <code>Deploy from a branch</code> を選びます</li>
+				<li><code>Branch</code> を <code>main</code> / <code>root</code> にして保存します</li>
+				<li>数十秒後に公開URLが表示されます</li>
+				<li>公開URLは通常 <code>https://ユーザー名.github.io/リポジトリ名/</code> です</li>
+			</ol>
+		</div>
+	</div>
+
+	<script>
+		const fileInput = document.getElementById("fileInput");
+		const dropzone = document.getElementById("dropzone");
+		const fileInfo = document.getElementById("fileInfo");
+		const convertBtn = document.getElementById("convertBtn");
+		const resetBtn = document.getElementById("resetBtn");
+		const preview = document.getElementById("preview");
+		const previewFileName = document.getElementById("previewFileName");
+		const errorBox = document.getElementById("errorBox");
+		const successBox = document.getElementById("successBox");
+		const addBom = document.getElementById("addBom");
+
+		let currentFile = null;
+		let currentText = "";
+
+		function getBaseName(filename) {
+			const lastDot = filename.lastIndexOf(".");
+			if (lastDot <= 0) return filename;
+			return filename.slice(0, lastDot);
+		}
+
+		function formatBytes(bytes) {
+			if (bytes < 1024) return bytes + " B";
+			if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+			return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+		}
+
+		function showError(message) {
+			errorBox.textContent = message;
+			errorBox.style.display = "block";
+			successBox.style.display = "none";
+		}
+
+		function showSuccess(message) {
+			successBox.textContent = message;
+			successBox.style.display = "block";
+			errorBox.style.display = "none";
+		}
+
+		function clearMessages() {
+			errorBox.style.display = "none";
+			successBox.style.display = "none";
+		}
+
+		function getSelectedOutputType() {
+			return document.querySelector('input[name="outputType"]:checked').value;
+		}
+
+		function getSelectedLineEnding() {
+			return document.querySelector('input[name="lineEnding"]:checked').value;
+		}
+
+		function normalizeLineEndings(text, mode) {
+			const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+			if (mode === "lf") return normalized;
+			if (mode === "crlf") return normalized.replace(/\n/g, "\r\n");
+			return text;
+		}
+
+		function getOutputFileName() {
+			if (!currentFile) return "converted.txt";
+			return getBaseName(currentFile.name) + "." + getSelectedOutputType();
+		}
+
+		function updatePreview() {
+			if (!currentText) {
+				preview.textContent = "ここに変換後のプレビューが表示されます";
+				previewFileName.textContent = "converted.txt";
+				return;
+			}
+
+			const lineEnding = getSelectedLineEnding();
+			const converted = normalizeLineEndings(currentText, lineEnding);
+			preview.textContent = converted.slice(0, 3000);
+			previewFileName.textContent = getOutputFileName();
+		}
+
+		async function loadFile(file) {
+			clearMessages();
+			try {
+				const text = await file.text();
+				currentFile = file;
+				currentText = text;
+				fileInfo.style.display = "block";
+				fileInfo.innerHTML = "<strong>ファイル名:</strong> " + file.name + "<br><strong>サイズ:</strong> " + formatBytes(file.size);
+				convertBtn.disabled = false;
+				updatePreview();
+				showSuccess(file.name + " を読み込みました");
+			} catch (e) {
+				showError("ファイルの読み込みに失敗しました。文字コードやファイル破損の可能性があります。");
+			}
+		}
+
+		function downloadBlob(blob, filename) {
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.href = url;
+			a.download = filename;
+			document.body.appendChild(a);
+			a.click();
+			a.remove();
+			URL.revokeObjectURL(url);
+		}
+
+		async function convertAndDownload() {
+			if (!currentFile) {
+				showError("先にファイルを選択してください。");
+				return;
+			}
+
+			clearMessages();
+
+			try {
+				const outputType = getSelectedOutputType();
+				const lineEnding = getSelectedLineEnding();
+				let converted = normalizeLineEndings(currentText, lineEnding);
+
+				if (addBom.checked) {
+					converted = "\uFEFF" + converted;
+				}
+
+				const base = getBaseName(currentFile.name);
+
+				if (outputType === "txt" || outputType === "md") {
+					const blob = new Blob([converted], { type: "text/plain;charset=utf-8" });
+					downloadBlob(blob, base + "." + outputType);
+					showSuccess(base + "." + outputType + " をダウンロードしました");
+					return;
+				}
+
+				const zip = new JSZip();
+				zip.file(base + ".txt", converted);
+				const blob = await zip.generateAsync({ type: "blob" });
+				downloadBlob(blob, base + ".zip");
+				showSuccess(base + ".zip をダウンロードしました");
+			} catch (e) {
+				showError("変換またはダウンロードに失敗しました。");
+			}
+		}
+
+		function resetAll() {
+			currentFile = null;
+			currentText = "";
+			fileInput.value = "";
+			fileInfo.style.display = "none";
+			convertBtn.disabled = true;
+			addBom.checked = false;
+			clearMessages();
+			updatePreview();
+		}
+
+		dropzone.addEventListener("click", function () {
+			fileInput.click();
+		});
+
+		fileInput.addEventListener("change", function (event) {
+			const file = event.target.files[0];
+			if (file) loadFile(file);
+		});
+
+		dropzone.addEventListener("dragover", function (event) {
+			event.preventDefault();
+			dropzone.classList.add("dragover");
+		});
+
+		dropzone.addEventListener("dragleave", function () {
+			dropzone.classList.remove("dragover");
+		});
+
+		dropzone.addEventListener("drop", function (event) {
+			event.preventDefault();
+			dropzone.classList.remove("dragover");
+			const file = event.dataTransfer.files[0];
+			if (file) loadFile(file);
+		});
+
+		convertBtn.addEventListener("click", convertAndDownload);
+		resetBtn.addEventListener("click", resetAll);
+
+		document.querySelectorAll('input[name="outputType"], input[name="lineEnding"]').forEach(function (input) {
+			input.addEventListener("change", updatePreview);
+		});
+	</script>
+</body>
+</html>
